@@ -19,14 +19,9 @@ class Module(MgrModule):
 
     def send_message(self, mail_to,  mail_body):
 	import subprocess
-#	try:
-#		process = subprocess.Popen(['mail', '-s', 'mail from ceph', mail_to],
-#				       stdin=subprocess.PIPE)
-#	except Exception, error:
-#		print error
-#	process.communicate(mail_body)
     	fromaddr='ceph@ceph.gabotyafot.com'
-    	subject="Testing..."
+    	subject="Hello from ceph"
+	#mail_body_with_addons = mail_body + str(self.get('health'))
     	cmd= 'echo '+mail_body+' | mail -s '+subject+' -r '+fromaddr+' '+mail_to
     	send=subprocess.call(cmd,shell=True)
 
