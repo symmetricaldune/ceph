@@ -19,9 +19,9 @@ class Module(MgrModule):
 
     def send_message(self, mail_to,  mail_body):
 	import subprocess
-    	fromaddr='ceph@ceph.gabotyafot.com'
+    	fromaddr='ceph@ceph.gabotyafot.com' ## todo - fix from address with internal ceph data
     	subject="Hello from ceph"
-	#mail_body_with_addons = mail_body + str(self.get('health'))
+	#mail_body_with_addons = mail_body + str(self.get('health')) ## todo - check how to parse and make health output beautiful
     	cmd= 'echo '+mail_body+' | mail -s '+subject+' -r '+fromaddr+' '+mail_to
     	send=subprocess.call(cmd,shell=True)
 
