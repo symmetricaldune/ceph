@@ -154,11 +154,11 @@ class PGRecoveryStats {
   PGRecoveryStats() : lock("PGRecoverStats::lock") {}
 
   void reset() {
-    Mutex::Locker l(lock);
+    std::lock_guard l(lock);
     info.clear();
   }
   void dump(ostream& out) {
-    Mutex::Locker l(lock);
+    std::lock_guard l(lock);
     for (map<const char *,per_state_info>::iterator p = info.begin(); p != info.end(); ++p) {
       per_state_info& i = p->second;
       out << i.enter << "\t" << i.exit << "\t"
@@ -170,7 +170,7 @@ class PGRecoveryStats {
   }
 
   void dump_formatted(Formatter *f) {
-    Mutex::Locker l(lock);
+    std::lock_guard l(lock);
     f->open_array_section("pg_recovery_stats");
     for (map<const char *,per_state_info>::iterator p = info.begin();
 	 p != info.end(); ++p) {
@@ -197,11 +197,11 @@ class PGRecoveryStats {
   }
 
   void log_enter(const char *s) {
-    Mutex::Locker l(lock);
+    std::lock_guard l(lock);
     info[s].enter++;
   }
   void log_exit(const char *s, utime_t dur, uint64_t events, utime_t event_dur) {
-    Mutex::Locker l(lock);
+    std::lock_guard l(lock);
     per_state_info &i = info[s];
     i.exit++;
     i.total_time += dur;
@@ -400,6 +400,7 @@ public:
   void split_into(pg_t child_pgid, PG *child, unsigned split_bits);
   void merge_from(map<spg_t,PGRef>& sources, RecoveryCtx *rctx,
 		  unsigned split_bits,
+		  epoch_t dec_last_epoch_started,
 		  epoch_t dec_last_epoch_clean);
   void finish_split_stats(const object_stat_sum_t& stats, ObjectStore::Transaction *t);
 
@@ -458,6 +459,8 @@ public:
     OpRequestRef& op,
     ThreadPool::TPHandle &handle
   ) = 0;
+  virtual void clear_cache() = 0;
+  virtual int get_cache_obj_count() = 0;
 
   virtual void snap_trimmer(epoch_t epoch_queued) = 0;
   virtual int do_command(

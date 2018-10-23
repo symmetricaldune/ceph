@@ -3,7 +3,7 @@
 /*
  * Ceph - scalable distributed file system
  *
- * Copyright (C) 2018 Myna Vajha <mynaramana@gmail.com>
+ * Copyright (C) 2018 Indian Institute of Science <office.ece@iisc.ac.in>
  *
  * Author: Myna Vajha <mynaramana@gmail.com>
  *
@@ -83,8 +83,6 @@ public:
   int get_repair_sub_chunk_count(const std::set<int> &want_to_read);
 
   virtual int parse(ceph::ErasureCodeProfile &profile, std::ostream *ss);
-
-  unsigned get_alignment() const;
 
 private:
   int minimum_to_repair(const std::set<int> &want_to_read,

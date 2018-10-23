@@ -341,6 +341,11 @@ Requires:      xfsprogs
 Requires:      which
 %if 0%{?fedora} || 0%{?rhel}
 Requires:      gdisk
+# The following is necessary due to tracker 36508 and can be removed once the
+# associated upstream bugs are resolved.
+%if 0%{with tcmalloc}
+Requires:      gperftools-libs >= 2.6.1
+%endif
 %endif
 %if 0%{?suse_version}
 Recommends:    chrony
@@ -930,6 +935,7 @@ RPM_OPT_FLAGS="$RPM_OPT_FLAGS --param ggc-min-expand=20 --param ggc-min-heapsize
 export CPPFLAGS="$java_inc"
 export CFLAGS="$RPM_OPT_FLAGS"
 export CXXFLAGS="$RPM_OPT_FLAGS"
+export LDFLAGS="$RPM_LD_FLAGS"
 
 # Parallel build settings ...
 CEPH_MFLAGS_JOBS="%{?_smp_mflags}"

@@ -17,7 +17,7 @@ except ImportError:
     client = None
     config = None
 
-from rook_cluster import RookCluster, ApplyException
+from .rook_cluster import RookCluster
 
 
 all_completions = []
@@ -33,7 +33,7 @@ class RookReadCompletion(orchestrator.ReadCompletion):
     def __init__(self, cb):
         super(RookReadCompletion, self).__init__()
         self.cb = cb
-        self.result = None
+        self._result = None
         self._complete = False
 
         self.message = "<read op>"
@@ -43,11 +43,15 @@ class RookReadCompletion(orchestrator.ReadCompletion):
         all_completions.append(self)
 
     @property
+    def result(self):
+        return self._result
+
+    @property
     def is_complete(self):
         return self._complete
 
     def execute(self):
-        self.result = self.cb()
+        self._result = self.cb()
         self._complete = True
 
 
@@ -182,12 +186,12 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
         if kubernetes_imported:
             return True, ""
         else:
-            return False, "`kubernetes` module not found"
+            return False, "`kubernetes` python module not found"
 
     def available(self):
         if not kubernetes_imported:
-            return False, "`kubernetes` module not found"
-        elif not self._in_cluster():
+            return False, "`kubernetes` python module not found"
+        elif not self._in_cluster_name:
             return False, "ceph-mgr not running in Rook cluster"
 
         try:
@@ -219,23 +223,27 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
         self._initialized.wait()
         return self._rook_cluster
 
-    def _in_cluster(self):
+    @property
+    def _in_cluster_name(self):
         """
         Check if we appear to be running inside a Kubernetes/Rook
         cluster
 
-        :return: bool
+        :return: str
         """
-        return 'ROOK_CLUSTER_NAME' in os.environ
+        if 'POD_NAMESPACE' in os.environ:
+            return os.environ['POD_NAMESPACE']
+        if 'ROOK_CLUSTER_NAME' in os.environ:
+            return os.environ['ROOK_CLUSTER_NAME']
 
     def serve(self):
         # For deployed clusters, we should always be running inside
         # a Rook cluster.  For development convenience, also support
         # running outside (reading ~/.kube config)
 
-        if self._in_cluster():
+        if self._in_cluster_name:
             config.load_incluster_config()
-            cluster_name = os.environ['ROOK_CLUSTER_NAME']
+            cluster_name = self._in_cluster_name
         else:
             self.log.warning("DEVELOPMENT ONLY: Reading kube config from ~")
             config.load_kube_config()
@@ -276,8 +284,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
 
             global all_completions
             self.wait(all_completions)
-            all_completions = filter(lambda x: not x.is_complete,
-                                     all_completions)
+            all_completions = [c for c in all_completions if not c.is_complete]
 
             self._shutdown.wait(5)
 

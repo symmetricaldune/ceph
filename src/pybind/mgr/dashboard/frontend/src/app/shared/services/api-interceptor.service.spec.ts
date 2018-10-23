@@ -1,4 +1,4 @@
-import { HTTP_INTERCEPTORS, HttpClient, HttpErrorResponse } from '@angular/common/http';
+import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { HttpClientTestingModule, HttpTestingController } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 import { Router } from '@angular/router';
@@ -78,16 +78,6 @@ describe('ApiInterceptorService', () => {
         status: 403
       },
       [['/403']],
-      done
-    );
-  });
-
-  it('should redirect 404', (done) => {
-    runRouterTest(
-      {
-        status: 404
-      },
-      [['/404']],
       done
     );
   });

@@ -3,12 +3,13 @@ import { FormControl, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 
 import * as _ from 'lodash';
-import { BsModalRef, BsModalService } from 'ngx-bootstrap';
+import { BsModalRef, BsModalService } from 'ngx-bootstrap/modal';
 
 import { AuthService } from '../../../shared/api/auth.service';
 import { RoleService } from '../../../shared/api/role.service';
 import { UserService } from '../../../shared/api/user.service';
 import { ConfirmationModalComponent } from '../../../shared/components/confirmation-modal/confirmation-modal.component';
+import { SelectBadgesMessages } from '../../../shared/components/select-badges/select-badges-messages.model';
 import { NotificationType } from '../../../shared/enum/notification-type.enum';
 import { CdFormGroup } from '../../../shared/forms/cd-form-group';
 import { CdValidators } from '../../../shared/forms/cd-validators';
@@ -35,6 +36,7 @@ export class UserFormComponent implements OnInit {
   userFormMode = UserFormMode;
   mode: UserFormMode;
   allRoles: Array<UserFormRoleModel>;
+  messages = new SelectBadgesMessages({ empty: 'There are no roles.' });
 
   constructor(
     private authService: AuthService,

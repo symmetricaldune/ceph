@@ -785,13 +785,13 @@ BlueStore::Cache *BlueStore::Cache::create(CephContext* cct, string type,
 
 void BlueStore::Cache::trim(uint64_t onode_max, uint64_t buffer_max)
 {
-  std::lock_guard<std::recursive_mutex> l(lock);
+  std::lock_guard l(lock);
   _trim(onode_max, buffer_max);
 }
 
 void BlueStore::Cache::trim_all()
 {
-  std::lock_guard<std::recursive_mutex> l(lock);
+  std::lock_guard l(lock);
   _trim(0, 0);
 }
 
@@ -1315,7 +1315,7 @@ void BlueStore::BufferSpace::read(
   uint32_t end = offset + length;
 
   {
-    std::lock_guard<std::recursive_mutex> l(cache->lock);
+    std::lock_guard l(cache->lock);
     for (auto i = _data_lower_bound(offset);
          i != buffer_map.end() && offset < end && i->first < end;
          ++i) {
@@ -1408,7 +1408,7 @@ void BlueStore::BufferSpace::_finish_write(Cache* cache, uint64_t seq)
 
 void BlueStore::BufferSpace::split(Cache* cache, size_t pos, BlueStore::BufferSpace &r)
 {
-  std::lock_guard<std::recursive_mutex> lk(cache->lock);
+  std::lock_guard lk(cache->lock);
   if (buffer_map.empty())
     return;
 
@@ -1463,7 +1463,7 @@ void BlueStore::BufferSpace::split(Cache* cache, size_t pos, BlueStore::BufferSp
 
 BlueStore::OnodeRef BlueStore::OnodeSpace::add(const ghobject_t& oid, OnodeRef o)
 {
-  std::lock_guard<std::recursive_mutex> l(cache->lock);
+  std::lock_guard l(cache->lock);
   auto p = onode_map.find(oid);
   if (p != onode_map.end()) {
     ldout(cache->cct, 30) << __func__ << " " << oid << " " << o
@@ -1484,7 +1484,7 @@ BlueStore::OnodeRef BlueStore::OnodeSpace::lookup(const ghobject_t& oid)
   bool hit = false;
 
   {
-    std::lock_guard<std::recursive_mutex> l(cache->lock);
+    std::lock_guard l(cache->lock);
     ceph::unordered_map<ghobject_t,OnodeRef>::iterator p = onode_map.find(oid);
     if (p == onode_map.end()) {
       ldout(cache->cct, 30) << __func__ << " " << oid << " miss" << dendl;
@@ -1507,7 +1507,7 @@ BlueStore::OnodeRef BlueStore::OnodeSpace::lookup(const ghobject_t& oid)
 
 void BlueStore::OnodeSpace::clear()
 {
-  std::lock_guard<std::recursive_mutex> l(cache->lock);
+  std::lock_guard l(cache->lock);
   ldout(cache->cct, 10) << __func__ << dendl;
   for (auto &p : onode_map) {
     cache->_rm_onode(p.second);
@@ -1517,7 +1517,7 @@ void BlueStore::OnodeSpace::clear()
 
 bool BlueStore::OnodeSpace::empty()
 {
-  std::lock_guard<std::recursive_mutex> l(cache->lock);
+  std::lock_guard l(cache->lock);
   return onode_map.empty();
 }
 
@@ -1527,7 +1527,7 @@ void BlueStore::OnodeSpace::rename(
   const ghobject_t& new_oid,
   const mempool::bluestore_cache_other::string& new_okey)
 {
-  std::lock_guard<std::recursive_mutex> l(cache->lock);
+  std::lock_guard l(cache->lock);
   ldout(cache->cct, 30) << __func__ << " " << old_oid << " -> " << new_oid
 			<< dendl;
   ceph::unordered_map<ghobject_t,OnodeRef>::iterator po, pn;
@@ -1558,7 +1558,7 @@ void BlueStore::OnodeSpace::rename(
 
 bool BlueStore::OnodeSpace::map_any(std::function<bool(OnodeRef)> f)
 {
-  std::lock_guard<std::recursive_mutex> l(cache->lock);
+  std::lock_guard l(cache->lock);
   ldout(cache->cct, 20) << __func__ << dendl;
   for (auto& i : onode_map) {
     if (f(i.second)) {
@@ -1618,7 +1618,7 @@ void BlueStore::SharedBlob::put()
   again:
     auto coll_snap = coll;
     if (coll_snap) {
-      std::lock_guard<std::recursive_mutex> l(coll_snap->cache->lock);
+      std::lock_guard l(coll_snap->cache->lock);
       if (coll_snap != coll) {
 	goto again;
       }
@@ -1650,7 +1650,7 @@ void BlueStore::SharedBlob::finish_write(uint64_t seq)
 {
   while (true) {
     Cache *cache = coll->cache;
-    std::lock_guard<std::recursive_mutex> l(cache->lock);
+    std::lock_guard l(cache->lock);
     if (coll->cache != cache) {
       ldout(coll->store->cct, 20) << __func__
 				  << " raced with sb cache update, was " << cache
@@ -1671,7 +1671,7 @@ void BlueStore::SharedBlob::finish_write(uint64_t seq)
 template <int LogLevelV = 30>
 void BlueStore::SharedBlobSet::dump(CephContext *cct)
 {
-  std::lock_guard<std::mutex> l(lock);
+  std::lock_guard l(lock);
   for (auto& i : sb_map) {
     ldout(cct, LogLevelV) << i.first << " : " << *i.second << dendl;
   }
@@ -3037,7 +3037,7 @@ void BlueStore::Onode::flush()
 {
   if (flushing_count.load()) {
     ldout(c->store->cct, 20) << __func__ << " cnt:" << flushing_count << dendl;
-    std::unique_lock<std::mutex> l(flush_lock);
+    std::unique_lock l(flush_lock);
     while (flushing_count.load()) {
       flush_cond.wait(l);
     }
@@ -3365,8 +3365,8 @@ void BlueStore::Collection::split_cache(
 
   // lock (one or both) cache shards
   std::lock(cache->lock, dest->cache->lock);
-  std::lock_guard<std::recursive_mutex> l(cache->lock, std::adopt_lock);
-  std::lock_guard<std::recursive_mutex> l2(dest->cache->lock, std::adopt_lock);
+  std::lock_guard l(cache->lock, std::adopt_lock);
+  std::lock_guard l2(dest->cache->lock, std::adopt_lock);
 
   int destbits = dest->cnode.bits;
   spg_t destpg;
@@ -3440,7 +3440,7 @@ void BlueStore::Collection::split_cache(
 
 void *BlueStore::MempoolThread::entry()
 {
-  Mutex::Locker l(lock);
+  std::unique_lock l(lock);
 
   std::list<PriorityCache::PriCache *> caches;
   caches.push_back(store->db);
@@ -3485,9 +3485,9 @@ void *BlueStore::MempoolThread::entry()
     interval_stats_trim = false;
 
     store->_update_cache_logger();
-    utime_t wait;
-    wait += store->cct->_conf->bluestore_cache_trim_interval;
-    cond.WaitInterval(lock, wait);
+    auto wait = ceph::make_timespan(
+      store->cct->_conf->bluestore_cache_trim_interval);
+    cond.wait_for(l, wait);
   }
   stop = false;
   return NULL;
@@ -4885,6 +4885,153 @@ bool BlueStore::test_mount_in_use()
   return ret;
 }
 
+int BlueStore::_open_bluefs(bool create)
+{
+  int r;
+  bluefs = new BlueFS(cct);
+
+  string bfn;
+  struct stat st;
+
+  bfn = path + "/block.db";
+  if (::stat(bfn.c_str(), &st) == 0) {
+    r = bluefs->add_block_device(BlueFS::BDEV_DB, bfn,
+	  create && cct->_conf->bdev_enable_discard);
+    if (r < 0) {
+      derr << __func__ << " add block device(" << bfn << ") returned: "
+            << cpp_strerror(r) << dendl;
+      goto free_bluefs;
+    }
+
+    if (bluefs->bdev_support_label(BlueFS::BDEV_DB)) {
+      r = _check_or_set_bdev_label(
+	bfn,
+	bluefs->get_block_device_size(BlueFS::BDEV_DB),
+        "bluefs db", create);
+      if (r < 0) {
+        derr << __func__
+	      << " check block device(" << bfn << ") label returned: "
+              << cpp_strerror(r) << dendl;
+        goto free_bluefs;
+      }
+    }
+    if (create) {
+      bluefs->add_block_extent(
+	BlueFS::BDEV_DB,
+	SUPER_RESERVED,
+	bluefs->get_block_device_size(BlueFS::BDEV_DB) - SUPER_RESERVED);
+    }
+    bluefs_shared_bdev = BlueFS::BDEV_SLOW;
+    bluefs_single_shared_device = false;
+  } else {
+    r = -errno;
+    if (::lstat(bfn.c_str(), &st) == -1) {
+      r = 0;
+      bluefs_shared_bdev = BlueFS::BDEV_DB;
+    } else {
+      derr << __func__ << " " << bfn << " symlink exists but target unusable: "
+	    << cpp_strerror(r) << dendl;
+      goto free_bluefs;
+    }
+  }
+
+  // shared device
+  bfn = path + "/block";
+  // never trim here
+  r = bluefs->add_block_device(bluefs_shared_bdev, bfn, false);
+  if (r < 0) {
+    derr << __func__ << " add block device(" << bfn << ") returned: "
+	  << cpp_strerror(r) << dendl;
+    goto free_bluefs;
+  }
+  if (create) {
+    // note: we always leave the first SUPER_RESERVED (8k) of the device unused
+    uint64_t initial =
+      bdev->get_size() * (cct->_conf->bluestore_bluefs_min_ratio +
+			  cct->_conf->bluestore_bluefs_gift_ratio);
+    initial = std::max(initial, cct->_conf->bluestore_bluefs_min);
+    if (cct->_conf->bluefs_alloc_size % min_alloc_size) {
+      derr << __func__ << " bluefs_alloc_size 0x" << std::hex
+	    << cct->_conf->bluefs_alloc_size << " is not a multiple of "
+	    << "min_alloc_size 0x" << min_alloc_size << std::dec << dendl;
+      r = -EINVAL;
+      goto free_bluefs;
+    }
+    // align to bluefs's alloc_size
+    initial = p2roundup(initial, cct->_conf->bluefs_alloc_size);
+    // put bluefs in the middle of the device in case it is an HDD
+    uint64_t start = p2align((bdev->get_size() - initial) / 2,
+			      cct->_conf->bluefs_alloc_size);
+    //avoiding superblock overwrite
+    ceph_assert(cct->_conf->bluefs_alloc_size > _get_ondisk_reserved());
+    start = std::max(cct->_conf->bluefs_alloc_size, start);
+
+    bluefs->add_block_extent(bluefs_shared_bdev, start, initial);
+    bluefs_extents.insert(start, initial);
+  }
+
+  bfn = path + "/block.wal";
+  if (::stat(bfn.c_str(), &st) == 0) {
+    r = bluefs->add_block_device(BlueFS::BDEV_WAL, bfn,
+      create && cct->_conf->bdev_enable_discard);
+    if (r < 0) {
+      derr << __func__ << " add block device(" << bfn << ") returned: "
+	    << cpp_strerror(r) << dendl;
+      goto free_bluefs;
+    }
+
+    if (bluefs->bdev_support_label(BlueFS::BDEV_WAL)) {
+      r = _check_or_set_bdev_label(
+	bfn,
+	bluefs->get_block_device_size(BlueFS::BDEV_WAL),
+        "bluefs wal", create);
+      if (r < 0) {
+        derr << __func__ << " check block device(" << bfn
+              << ") label returned: " << cpp_strerror(r) << dendl;
+        goto free_bluefs;
+      }
+    }
+
+    if (create) {
+      bluefs->add_block_extent(
+        BlueFS::BDEV_WAL, BDEV_LABEL_BLOCK_SIZE,
+	  bluefs->get_block_device_size(BlueFS::BDEV_WAL) -
+	  BDEV_LABEL_BLOCK_SIZE);
+    }
+    bluefs_single_shared_device = false;
+  } else {
+    r = 0;
+    if (::lstat(bfn.c_str(), &st) != -1) {
+      r = -errno;
+      derr << __func__ << " " << bfn << " symlink exists but target unusable: "
+           << cpp_strerror(r) << dendl;
+      goto free_bluefs;
+    }
+  }
+
+  if (create) {
+    bluefs->mkfs(fsid);
+  }
+  r = bluefs->mount();
+  if (r < 0) {
+    derr << __func__ << " failed bluefs mount: " << cpp_strerror(r) << dendl;
+    goto free_bluefs;
+  }
+  
+  return 0;
+free_bluefs:
+  ceph_assert(bluefs);
+  delete bluefs;
+  bluefs = NULL;
+  return r;
+}
+
+void BlueStore::_close_bluefs()
+{
+  bluefs->umount();
+  delete bluefs;
+  bluefs = NULL;
+}
 int BlueStore::_open_db(bool create, bool to_repair_db)
 {
   int r;
@@ -4931,6 +5078,8 @@ int BlueStore::_open_db(bool create, bool to_repair_db)
   dout(10) << __func__ << " do_bluefs = " << do_bluefs << dendl;
 
   map<string,string> kv_options;
+  // force separate wal dir for all new deployments.
+  kv_options["separate_wal_dir"] = 1;
   rocksdb::Env *env = NULL;
   if (do_bluefs) {
     dout(10) << __func__ << " initializing bluefs" << dendl;
@@ -4938,138 +5087,9 @@ int BlueStore::_open_db(bool create, bool to_repair_db)
       derr << " backend must be rocksdb to use bluefs" << dendl;
       return -EINVAL;
     }
-    bluefs = new BlueFS(cct);
 
-    string bfn;
-    struct stat st;
+    r = _open_bluefs(create);
 
-    bfn = path + "/block.db";
-    if (::stat(bfn.c_str(), &st) == 0) {
-      r = bluefs->add_block_device(BlueFS::BDEV_DB, bfn,
-	    create && cct->_conf->bdev_enable_discard);
-      if (r < 0) {
-        derr << __func__ << " add block device(" << bfn << ") returned: " 
-             << cpp_strerror(r) << dendl;
-        goto free_bluefs;
-      }
-
-      if (bluefs->bdev_support_label(BlueFS::BDEV_DB)) {
-        r = _check_or_set_bdev_label(
-	  bfn,
-	  bluefs->get_block_device_size(BlueFS::BDEV_DB),
-          "bluefs db", create);
-        if (r < 0) {
-          derr << __func__
-	       << " check block device(" << bfn << ") label returned: "
-               << cpp_strerror(r) << dendl;
-          goto free_bluefs;
-        }
-      }
-      if (create) {
-	bluefs->add_block_extent(
-	  BlueFS::BDEV_DB,
-	  SUPER_RESERVED,
-	  bluefs->get_block_device_size(BlueFS::BDEV_DB) - SUPER_RESERVED);
-      }
-      bluefs_shared_bdev = BlueFS::BDEV_SLOW;
-      bluefs_single_shared_device = false;
-    } else {
-      r = -errno;
-      if (::lstat(bfn.c_str(), &st) == -1) {
-	r = 0;
-	bluefs_shared_bdev = BlueFS::BDEV_DB;
-      } else {
-	derr << __func__ << " " << bfn << " symlink exists but target unusable: "
-	     << cpp_strerror(r) << dendl;
-	goto free_bluefs;
-      }
-    }
-
-    // shared device
-    bfn = path + "/block";
-    // never trim here
-    r = bluefs->add_block_device(bluefs_shared_bdev, bfn, false);
-    if (r < 0) {
-      derr << __func__ << " add block device(" << bfn << ") returned: " 
-	   << cpp_strerror(r) << dendl;
-      goto free_bluefs;
-    }
-    if (create) {
-      // note: we always leave the first SUPER_RESERVED (8k) of the device unused
-      uint64_t initial =
-	bdev->get_size() * (cct->_conf->bluestore_bluefs_min_ratio +
-			    cct->_conf->bluestore_bluefs_gift_ratio);
-      initial = std::max(initial, cct->_conf->bluestore_bluefs_min);
-      if (cct->_conf->bluefs_alloc_size % min_alloc_size) {
-	derr << __func__ << " bluefs_alloc_size 0x" << std::hex
-	     << cct->_conf->bluefs_alloc_size << " is not a multiple of "
-	     << "min_alloc_size 0x" << min_alloc_size << std::dec << dendl;
-	r = -EINVAL;
-	goto free_bluefs;
-      }
-      // align to bluefs's alloc_size
-      initial = p2roundup(initial, cct->_conf->bluefs_alloc_size);
-      // put bluefs in the middle of the device in case it is an HDD
-      uint64_t start = p2align((bdev->get_size() - initial) / 2,
-			       cct->_conf->bluefs_alloc_size);
-      //avoiding superblock overwrite
-      ceph_assert(cct->_conf->bluefs_alloc_size > _get_ondisk_reserved());
-      start = std::max(cct->_conf->bluefs_alloc_size, start);
-
-      bluefs->add_block_extent(bluefs_shared_bdev, start, initial);
-      bluefs_extents.insert(start, initial);
-    }
-
-    bfn = path + "/block.wal";
-    if (::stat(bfn.c_str(), &st) == 0) {
-      r = bluefs->add_block_device(BlueFS::BDEV_WAL, bfn,
-	create && cct->_conf->bdev_enable_discard);
-      if (r < 0) {
-        derr << __func__ << " add block device(" << bfn << ") returned: " 
-	     << cpp_strerror(r) << dendl;
-        goto free_bluefs;			
-      }
-
-      if (bluefs->bdev_support_label(BlueFS::BDEV_WAL)) {
-        r = _check_or_set_bdev_label(
-	  bfn,
-	  bluefs->get_block_device_size(BlueFS::BDEV_WAL),
-          "bluefs wal", create);
-        if (r < 0) {
-          derr << __func__ << " check block device(" << bfn
-               << ") label returned: " << cpp_strerror(r) << dendl;
-          goto free_bluefs;
-        }
-      }
-
-      if (create) {
-	bluefs->add_block_extent(
-	  BlueFS::BDEV_WAL, BDEV_LABEL_BLOCK_SIZE,
-	  bluefs->get_block_device_size(BlueFS::BDEV_WAL) -
-	   BDEV_LABEL_BLOCK_SIZE);
-      }
-      kv_options["separate_wal_dir"] = "1";
-      bluefs_single_shared_device = false;
-    } else {
-      r = -errno;
-      if (::lstat(bfn.c_str(), &st) == -1) {
-	kv_options.erase("separate_wal_dir");
-	r = 0;
-      } else {
-	derr << __func__ << " " << bfn << " symlink exists but target unusable: "
-	     << cpp_strerror(r) << dendl;
-	goto free_bluefs;
-      }
-    }
-
-    if (create) {
-      bluefs->mkfs(fsid);
-    }
-    r = bluefs->mount();
-    if (r < 0) {
-      derr << __func__ << " failed bluefs mount: " << cpp_strerror(r) << dendl;
-      goto free_bluefs;
-    }
     if (cct->_conf->bluestore_bluefs_env_mirror) {
       rocksdb::Env *a = new BlueRocksEnv(bluefs);
       rocksdb::Env *b = rocksdb::Env::Default();
@@ -5104,24 +5124,30 @@ int BlueStore::_open_db(bool create, bool to_repair_db)
 
     if (create) {
       env->CreateDir(fn);
-      if (kv_options.count("separate_wal_dir"))
-	env->CreateDir(fn + ".wal");
-      if (kv_options.count("rocksdb_db_paths"))
-	env->CreateDir(fn + ".slow");
+      env->CreateDir(fn + ".wal");
+      env->CreateDir(fn + ".slow");
+    } else {
+      std::vector<std::string> res;
+      // check for dir presence
+      auto r = env->GetChildren(fn+".wal", &res);
+      if (r == rocksdb::Status::NotFound()) {
+	kv_options.erase("separate_wal_dir");
+      }
     }
-  } else if (create) {
-    int r = ::mkdir(fn.c_str(), 0755);
-    if (r < 0)
-      r = -errno;
-    if (r < 0 && r != -EEXIST) {
-      derr << __func__ << " failed to create " << fn << ": " << cpp_strerror(r)
-	   << dendl;
-      return r;
-    }
+  } else {
+    string walfn = path + "/db.wal";
 
-    // wal_dir, too!
-    if (kv_options.count("separate_wal_dir")) {
-      string walfn = path + "/db.wal";
+    if (create) {
+      int r = ::mkdir(fn.c_str(), 0755);
+      if (r < 0)
+	r = -errno;
+      if (r < 0 && r != -EEXIST) {
+	derr << __func__ << " failed to create " << fn << ": " << cpp_strerror(r)
+	     << dendl;
+	return r;
+      }
+
+      // wal_dir, too!
       r = ::mkdir(walfn.c_str(), 0755);
       if (r < 0)
 	r = -errno;
@@ -5130,6 +5156,12 @@ int BlueStore::_open_db(bool create, bool to_repair_db)
 	  << ": " << cpp_strerror(r)
 	  << dendl;
 	return r;
+      }
+    } else {
+      struct stat st;
+      r = ::stat(walfn.c_str(), &st);
+      if (r < 0 && errno == ENOENT) {
+	kv_options.erase("separate_wal_dir");
       }
     }
   }
@@ -5143,9 +5175,7 @@ int BlueStore::_open_db(bool create, bool to_repair_db)
   if (!db) {
     derr << __func__ << " error creating db" << dendl;
     if (bluefs) {
-      bluefs->umount();
-      delete bluefs;
-      bluefs = NULL;
+      _close_bluefs();
     }
     // delete env manually here since we can't depend on db to do this
     // under this case
@@ -5194,12 +5224,6 @@ int BlueStore::_open_db(bool create, bool to_repair_db)
   dout(1) << __func__ << " opened " << kv_backend
 	  << " path " << fn << " options " << options << dendl;
   return 0;
-
-free_bluefs:
-  ceph_assert(bluefs);
-  delete bluefs;
-  bluefs = NULL;
-  return r;
 }
 
 void BlueStore::_close_db()
@@ -5208,9 +5232,7 @@ void BlueStore::_close_db()
   delete db;
   db = NULL;
   if (bluefs) {
-    bluefs->umount();
-    delete bluefs;
-    bluefs = NULL;
+    _close_bluefs();
   }
 }
 
@@ -5267,6 +5289,57 @@ void BlueStore::_dump_alloc_on_rebalance_failure()
     next_dump_on_bluefs_balance_failure = ceph_clock_now();
     next_dump_on_bluefs_balance_failure += dump_interval;
   }
+}
+
+
+int BlueStore::allocate_bluefs_freespace(uint64_t size)
+{
+  PExtentVector extents;
+
+  if (size) {
+    // round up to alloc size
+    size = p2roundup(size, cct->_conf->bluefs_alloc_size);
+
+    uint64_t gift;
+    do {
+      // hard cap to fit into 32 bits
+      gift = std::min<uint64_t>(size, 1ull << 31);
+      dout(10) << __func__ << " gifting " << gift
+	       << " (" << byte_u_t(gift) << ")" << dendl;
+
+      int64_t alloc_len = alloc->allocate(gift, cct->_conf->bluefs_alloc_size,
+					  0, 0, &extents);
+
+      if (alloc_len < (int64_t)gift) {
+	dout(0) << __func__ << " no allocate on 0x" << std::hex << gift
+		<< " min_alloc_size 0x" << cct->_conf->bluefs_alloc_size
+		<< std::dec << dendl;
+        alloc->dump();
+        alloc->release(extents);
+	return -ENOSPC;
+      }
+      size -= gift;
+    } while (size);
+    KeyValueDB::Transaction synct = db->get_transaction();
+    for (auto& e : extents) {
+      dout(1) << __func__ << " gifting " << e << " to bluefs" << dendl;
+      bluefs->add_block_extent( bluefs_shared_bdev, e.offset, e.length);
+      bluefs_extents.insert(e.offset, e.length);
+    }
+
+    bufferlist bl;
+
+    encode(bluefs_extents, bl);
+    dout(10) << __func__ << " bluefs_extents now 0x" << std::hex
+	      << bluefs_extents << std::dec << dendl;
+    synct->set(PREFIX_SUPER, "bluefs_extents", bl);
+
+    synct->set(PREFIX_SUPER, "bluefs_extents_back", bl);
+
+    int r = db->submit_transaction_sync(synct);
+    ceph_assert(r == 0);
+  }
+  return 0;
 }
 
 int BlueStore::_balance_bluefs_freespace(PExtentVector *extents)
@@ -5353,12 +5426,13 @@ int BlueStore::_balance_bluefs_freespace(PExtentVector *extents)
 
     if (alloc_len <= 0) {
       dout(0) << __func__ << " no allocate on 0x" << std::hex << gift
-              << " min_alloc_size 0x" << min_alloc_size << std::dec << dendl;
+              << " bluefs_alloc_size 0x" << cct->_conf->bluefs_alloc_size
+	      << std::dec << dendl;
       _dump_alloc_on_rebalance_failure();
       return 0;
     } else if (alloc_len < (int64_t)gift) {
       dout(0) << __func__ << " insufficient allocate on 0x" << std::hex << gift
-              << " min_alloc_size 0x" << min_alloc_size 
+              << " bluefs_alloc_size 0x" << cct->_conf->bluefs_alloc_size
 	      << " allocated 0x" << alloc_len
 	      << std::dec << dendl;
       _dump_alloc_on_rebalance_failure();
@@ -5748,6 +5822,277 @@ int BlueStore::mkfs()
   } else {
     dout(0) << __func__ << " success" << dendl;
   }
+  return r;
+}
+
+int BlueStore::_mount_for_bluefs()
+{
+  int r = _open_path();
+  ceph_assert(r == 0);
+  r = _open_fsid(false);
+  ceph_assert(r == 0);
+  r = _read_fsid(&fsid);
+  ceph_assert(r == 0);
+  r = _lock_fsid();
+  ceph_assert(r == 0);
+  r = _open_bluefs(false);
+  ceph_assert(r == 0);
+  return r;
+}
+
+void BlueStore::_umount_for_bluefs()
+{
+  _close_bluefs();
+  _close_fsid();
+  _close_path();
+}
+
+int BlueStore::add_new_bluefs_device(int id, const string& dev_path)
+{
+  dout(10) << __func__ << " path " << dev_path << " id:" << id << dendl;
+  int r;
+  ceph_assert(path_fd < 0);
+
+  ceph_assert(id == BlueFS::BDEV_NEWWAL || id == BlueFS::BDEV_NEWDB);
+
+  if (!cct->_conf->bluestore_bluefs) {
+    derr << __func__ << " bluefs isn't configured, can't add new device " << dendl;
+    return -EIO;
+  }
+
+  r = _mount_for_bluefs();
+
+  int reserved;
+  if (id == BlueFS::BDEV_NEWWAL) {
+    string p = path + "/block.wal";
+    r = _setup_block_symlink_or_file("block.wal", dev_path,
+	cct->_conf->bluestore_block_wal_size,
+	true);
+    ceph_assert(r == 0);
+
+    r = bluefs->add_block_device(BlueFS::BDEV_NEWWAL, p,
+      cct->_conf->bdev_enable_discard);
+    ceph_assert(r == 0);
+
+    if (bluefs->bdev_support_label(BlueFS::BDEV_NEWWAL)) {
+      r = _check_or_set_bdev_label(
+	p,
+	bluefs->get_block_device_size(BlueFS::BDEV_NEWWAL),
+        "bluefs wal",
+	true);
+      ceph_assert(r == 0);
+    }
+
+    reserved = BDEV_LABEL_BLOCK_SIZE;
+  } else if (id == BlueFS::BDEV_NEWDB) {
+    string p = path + "/block.db";
+    r = _setup_block_symlink_or_file("block.db", dev_path,
+	cct->_conf->bluestore_block_db_size,
+	true);
+    ceph_assert(r == 0);
+
+    r = bluefs->add_block_device(BlueFS::BDEV_NEWDB, p,
+      cct->_conf->bdev_enable_discard);
+    ceph_assert(r == 0);
+
+    if (bluefs->bdev_support_label(BlueFS::BDEV_NEWDB)) {
+      r = _check_or_set_bdev_label(
+	p,
+	bluefs->get_block_device_size(BlueFS::BDEV_NEWDB),
+        "bluefs db",
+	true);
+      ceph_assert(r == 0);
+    }
+    reserved = SUPER_RESERVED;
+  }
+
+  bluefs->umount();
+  bluefs->mount();
+
+  bluefs->add_block_extent(
+    id,
+    reserved,
+    bluefs->get_block_device_size(id) - reserved);
+
+  r = bluefs->prepare_new_device(id);
+  ceph_assert(r == 0);
+
+  if (r < 0) {
+    derr << __func__ << " failed, " << cpp_strerror(r) << dendl;
+  } else {
+    dout(0) << __func__ << " success" << dendl;
+  }
+
+  _umount_for_bluefs();
+  return r;
+}
+
+int BlueStore::migrate_to_existing_bluefs_device(const set<int>& devs_source,
+  int id)
+{
+  dout(10) << __func__ << " id:" << id << dendl;
+  ceph_assert(path_fd < 0);
+
+  ceph_assert(id == BlueFS::BDEV_SLOW || id == BlueFS::BDEV_DB);
+
+  if (!cct->_conf->bluestore_bluefs) {
+    derr << __func__ << " bluefs isn't configured, can't add new device " << dendl;
+    return -EIO;
+  }
+
+  int r = _mount_for_bluefs();
+
+  // require bluestore_bluefs_min_free to be free at target device!
+  uint64_t used_space = cct->_conf.get_val<Option::size_t>("bluestore_bluefs_min_free");
+  for(auto src_id : devs_source) {
+    used_space += bluefs->get_total(src_id) - bluefs->get_free(src_id);
+  }
+  uint64_t target_free = bluefs->get_free(id);
+  if (id == BlueFS::BDEV_SLOW && target_free < used_space) {
+    // will need to remount full BlueStore instance to allocate more space
+    _umount_for_bluefs();
+
+    r = mount();
+    ceph_assert(r == 0);
+    dout(1) << __func__
+            << " Allocating more space at slow device for BlueFS: +"
+	    << used_space - target_free << " bytes" << dendl;
+    r = allocate_bluefs_freespace(used_space - target_free);
+    umount();
+    if (r != 0) {
+      derr << __func__
+	   << " can't migrate, unable to allocate extra space: "
+	   << used_space - target_free << " at target:" << id
+	   << dendl;
+      return -ENOSPC;
+    }
+
+    r = _mount_for_bluefs();
+    ceph_assert(r == 0);
+  } else if (target_free < used_space) {
+    derr << __func__
+         << " can't migrate, free space at target: " << target_free
+	 << " is less than required space: " << used_space
+	 << dendl;
+    return -ENOSPC;
+  }
+  r = bluefs->device_migrate_to_existing(cct, devs_source, id);
+  if (r < 0) {
+    derr << __func__ << " failed during BlueFS migration, " << cpp_strerror(r) << dendl;
+    goto shutdown;
+  }
+
+  if (devs_source.count(BlueFS::BDEV_DB)) {
+    r = unlink(string(path + "/block.db").c_str());
+    ceph_assert(r == 0);
+  }
+  if (devs_source.count(BlueFS::BDEV_WAL)) {
+    r = unlink(string(path + "/block.wal").c_str());
+    ceph_assert(r == 0);
+  }
+
+shutdown:
+  _umount_for_bluefs();
+  return r;
+}
+
+int BlueStore::migrate_to_new_bluefs_device(const set<int>& devs_source,
+  int id,
+  const string& dev_path)
+{
+  dout(10) << __func__ << " path " << dev_path << " id:" << id << dendl;
+  int r;
+  ceph_assert(path_fd < 0);
+
+  ceph_assert(id == BlueFS::BDEV_NEWWAL || id == BlueFS::BDEV_NEWDB);
+
+  if (!cct->_conf->bluestore_bluefs) {
+    derr << __func__ << " bluefs isn't configured, can't add new device " << dendl;
+    return -EIO;
+  }
+
+  r = _mount_for_bluefs();
+
+  int reserved = 0;
+  string link_db;
+  string link_wal;
+  if (devs_source.count(BlueFS::BDEV_DB) &&
+      bluefs_shared_bdev != BlueFS::BDEV_DB) {
+    link_db = path + "/block.db";
+  }
+  if (devs_source.count(BlueFS::BDEV_WAL)) {
+    link_wal = path + "/block.wal";
+  }
+
+  size_t target_size;
+  string target_name;
+  if (id == BlueFS::BDEV_NEWWAL) {
+    target_name = "block.wal";
+    target_size = cct->_conf->bluestore_block_wal_size;
+
+    r = bluefs->add_block_device(BlueFS::BDEV_NEWWAL, dev_path,
+      cct->_conf->bdev_enable_discard);
+    ceph_assert(r == 0);
+
+    if (bluefs->bdev_support_label(BlueFS::BDEV_NEWWAL)) {
+      r = _check_or_set_bdev_label(
+	dev_path,
+	bluefs->get_block_device_size(BlueFS::BDEV_NEWWAL),
+        "bluefs wal",
+	true);
+      ceph_assert(r == 0);
+    }
+    reserved = BDEV_LABEL_BLOCK_SIZE;
+  } else if (id == BlueFS::BDEV_NEWDB) {
+    target_name = "block.db";
+    target_size = cct->_conf->bluestore_block_db_size;
+
+    r = bluefs->add_block_device(BlueFS::BDEV_NEWDB, dev_path,
+      cct->_conf->bdev_enable_discard);
+    ceph_assert(r == 0);
+
+    if (bluefs->bdev_support_label(BlueFS::BDEV_NEWDB)) {
+      r = _check_or_set_bdev_label(
+	dev_path,
+	bluefs->get_block_device_size(BlueFS::BDEV_NEWDB),
+        "bluefs db",
+	true);
+      ceph_assert(r == 0);
+    }
+    reserved = SUPER_RESERVED;
+  }
+
+  bluefs->umount();
+  bluefs->mount();
+
+  bluefs->add_block_extent(
+    id, reserved, bluefs->get_block_device_size(id) - reserved);
+
+  r = bluefs->device_migrate_to_new(cct, devs_source, id);
+
+  if (r < 0) {
+    derr << __func__ << " failed during BlueFS migration, " << cpp_strerror(r) << dendl;
+    goto shutdown;
+  }
+
+  if (!link_db.empty()) {
+    r = unlink(link_db.c_str());
+    ceph_assert(r == 0);
+  }
+  if (!link_wal.empty()) {
+    r = unlink(link_wal.c_str());
+    ceph_assert(r == 0);
+  }
+  r = _setup_block_symlink_or_file(
+    target_name,
+    dev_path,
+    target_size,
+    true);
+  ceph_assert(r == 0);
+  dout(0) << __func__ << " success" << dendl;
+
+shutdown:
+  _umount_for_bluefs();
   return r;
 }
 
@@ -6818,7 +7163,7 @@ int BlueStore::_fsck(bool deep, bool repair)
       apply(
         e.get_start(), e.get_len(), fm->get_alloc_size(), used_blocks,
         [&](uint64_t pos, mempool_dynamic_bitset &bs) {
-	ceph_assert(pos < bs.size());
+	  ceph_assert(pos < bs.size());
 	  bs.reset(pos);
         }
       );
@@ -7100,7 +7445,7 @@ int BlueStore::statfs(struct store_statfs_t *buf)
   }
 
   {
-    std::lock_guard<std::mutex> l(vstatfs_lock);
+    std::lock_guard l(vstatfs_lock);
     buf->allocated = vstatfs.allocated();
     buf->data_stored = vstatfs.stored();
     buf->data_compressed = vstatfs.compressed();
@@ -8464,6 +8809,21 @@ int BlueStore::_open_super_meta()
 
   // bluefs alloc
   if (cct->_conf->bluestore_bluefs) {
+    {
+      bluefs_extents.clear();
+      bufferlist bl;
+      db->get(PREFIX_SUPER, "bluefs_extents_back", &bl);
+      auto p = bl.cbegin();
+      try {
+	decode(bluefs_extents, p);
+      }
+      catch (buffer::error& e) {
+	dout(0) << __func__ << " unable to read bluefs_extents_back" << dendl;
+	//return -EIO;
+      }
+      dout(10) << __func__ << " bluefs_extents_back 0x" << std::hex << bluefs_extents
+	       << std::dec << dendl;
+    }
     bluefs_extents.clear();
     bufferlist bl;
     db->get(PREFIX_SUPER, "bluefs_extents", &bl);
@@ -8477,6 +8837,7 @@ int BlueStore::_open_super_meta()
     }
     dout(10) << __func__ << " bluefs_extents 0x" << std::hex << bluefs_extents
 	     << std::dec << dendl;
+    
   }
 
   // ondisk format
@@ -8660,7 +9021,7 @@ void BlueStore::_txc_update_store_statfs(TransContext *txc)
   logger->inc(l_bluestore_compressed_original, txc->statfs_delta.compressed_original());
 
   {
-    std::lock_guard<std::mutex> l(vstatfs_lock);
+    std::lock_guard l(vstatfs_lock);
     vstatfs += txc->statfs_delta;
   }
 
@@ -8693,7 +9054,7 @@ void BlueStore::_txc_state_proc(TransContext *txc)
       return;
 
     case TransContext::STATE_IO_DONE:
-      //assert(txc->osr->qlock.is_locked());  // see _txc_finish_io
+      assert(ceph_mutex_is_locked(txc->osr->qlock));  // see _txc_finish_io
       if (txc->had_ios) {
 	++txc->osr->txc_with_unstable_io;
       }
@@ -8728,7 +9089,7 @@ void BlueStore::_txc_state_proc(TransContext *txc)
 	}
       }
       {
-	std::lock_guard<std::mutex> l(kv_lock);
+	std::lock_guard l(kv_lock);
 	kv_queue.push_back(txc);
 	kv_cond.notify_one();
 	if (txc->state != TransContext::STATE_KV_SUBMITTED) {
@@ -8783,7 +9144,7 @@ void BlueStore::_txc_finish_io(TransContext *txc)
    */
 
   OpSequencer *osr = txc->osr.get();
-  std::lock_guard<std::mutex> l(osr->qlock);
+  std::lock_guard l(osr->qlock);
   txc->state = TransContext::STATE_IO_DONE;
   txc->ioc.release_running_aios();
   OpSequencer::q_list_t::iterator p = osr->q.iterator_to(*txc);
@@ -8921,7 +9282,7 @@ void BlueStore::_txc_applied_kv(TransContext *txc)
       dout(20) << __func__ << " onode " << o << " had " << o->flushing_count
 	       << dendl;
       if (--o->flushing_count == 0) {
-        std::lock_guard<std::mutex> l(o->flush_lock);
+        std::lock_guard l(o->flush_lock);
 	o->flush_cond.notify_all();
       }
     }
@@ -8932,7 +9293,7 @@ void BlueStore::_txc_committed_kv(TransContext *txc)
 {
   dout(20) << __func__ << " txc " << txc << dendl;
   {
-    std::lock_guard<std::mutex> l(txc->osr->qlock);
+    std::lock_guard l(txc->osr->qlock);
     txc->state = TransContext::STATE_KV_DONE;
     if (txc->ch->commit_queue) {
       txc->ch->commit_queue->queue(txc->oncommits);
@@ -8964,7 +9325,7 @@ void BlueStore::_txc_finish(TransContext *txc)
   bool submit_deferred = false;
   OpSequencer::q_list_t releasing_txc;
   {
-    std::lock_guard<std::mutex> l(osr->qlock);
+    std::lock_guard l(osr->qlock);
     txc->state = TransContext::STATE_DONE;
     bool notify = false;
     while (!osr->q.empty()) {
@@ -9014,7 +9375,7 @@ void BlueStore::_txc_finish(TransContext *txc)
   }
 
   if (empty && osr->zombie) {
-    std::lock_guard<std::mutex> l(zombie_osr_lock);
+    std::lock_guard l(zombie_osr_lock);
     if (zombie_osr_set.erase(osr->cid)) {
       dout(10) << __func__ << " reaping empty zombie osr " << osr << dendl;
     } else {
@@ -9061,7 +9422,7 @@ void BlueStore::_osr_attach(Collection *c)
 		   << " reusing osr " << c->osr << " from existing coll "
 		   << q->second << dendl;
   } else {
-    std::lock_guard<std::mutex> l(zombie_osr_lock);
+    std::lock_guard l(zombie_osr_lock);
     auto p = zombie_osr_set.find(c->cid);
     if (p == zombie_osr_set.end()) {
       c->osr = new OpSequencer(this, c->cid);
@@ -9079,7 +9440,7 @@ void BlueStore::_osr_attach(Collection *c)
 
 void BlueStore::_osr_register_zombie(OpSequencer *osr)
 {
-  std::lock_guard<std::mutex> l(zombie_osr_lock);
+  std::lock_guard l(zombie_osr_lock);
   dout(10) << __func__ << " " << osr << " " << osr->cid << dendl;
   osr->zombie = true;
   auto i = zombie_osr_set.emplace(osr->cid, osr);
@@ -9103,7 +9464,7 @@ void BlueStore::_osr_drain_preceding(TransContext *txc)
   }
   {
     // wake up any previously finished deferred events
-    std::lock_guard<std::mutex> l(kv_lock);
+    std::lock_guard l(kv_lock);
     kv_cond.notify_one();
   }
   osr->drain_preceding(txc);
@@ -9126,7 +9487,7 @@ void BlueStore::_osr_drain(OpSequencer *osr)
   }
   {
     // wake up any previously finished deferred events
-    std::lock_guard<std::mutex> l(kv_lock);
+    std::lock_guard l(kv_lock);
     kv_cond.notify_one();
   }
   osr->drain();
@@ -9147,7 +9508,7 @@ void BlueStore::_osr_drain_all()
     }
   }
   {
-    std::lock_guard<std::mutex> l(zombie_osr_lock);
+    std::lock_guard l(zombie_osr_lock);
     for (auto& i : zombie_osr_set) {
       s.insert(i.second);
       zombies.push_back(i.second);
@@ -9162,11 +9523,11 @@ void BlueStore::_osr_drain_all()
   }
   {
     // wake up any previously finished deferred events
-    std::lock_guard<std::mutex> l(kv_lock);
+    std::lock_guard l(kv_lock);
     kv_cond.notify_one();
   }
   {
-    std::lock_guard<std::mutex> l(kv_finalize_lock);
+    std::lock_guard l(kv_finalize_lock);
     kv_finalize_cond.notify_one();
   }
   for (auto osr : s) {
@@ -9176,7 +9537,7 @@ void BlueStore::_osr_drain_all()
   --deferred_aggressive;
 
   {
-    std::lock_guard<std::mutex> l(zombie_osr_lock);
+    std::lock_guard l(zombie_osr_lock);
     for (auto& osr : zombies) {
       if (zombie_osr_set.erase(osr->cid)) {
 	dout(10) << __func__ << " reaping empty zombie osr " << osr << dendl;
@@ -9210,7 +9571,7 @@ void BlueStore::_kv_stop()
 {
   dout(10) << __func__ << dendl;
   {
-    std::unique_lock<std::mutex> l(kv_lock);
+    std::unique_lock l(kv_lock);
     while (!kv_sync_started) {
       kv_cond.wait(l);
     }
@@ -9218,7 +9579,7 @@ void BlueStore::_kv_stop()
     kv_cond.notify_all();
   }
   {
-    std::unique_lock<std::mutex> l(kv_finalize_lock);
+    std::unique_lock l(kv_finalize_lock);
     while (!kv_finalize_started) {
       kv_finalize_cond.wait(l);
     }
@@ -9229,11 +9590,11 @@ void BlueStore::_kv_stop()
   kv_finalize_thread.join();
   ceph_assert(removed_collections.empty());
   {
-    std::lock_guard<std::mutex> l(kv_lock);
+    std::lock_guard l(kv_lock);
     kv_stop = false;
   }
   {
-    std::lock_guard<std::mutex> l(kv_finalize_lock);
+    std::lock_guard l(kv_finalize_lock);
     kv_finalize_stop = false;
   }
   dout(10) << __func__ << " stopping finishers" << dendl;
@@ -9248,7 +9609,7 @@ void BlueStore::_kv_sync_thread()
 {
   dout(10) << __func__ << " start" << dendl;
   deque<DeferredBatch*> deferred_stable_queue; ///< deferred ios done + stable
-  std::unique_lock<std::mutex> l(kv_lock);
+  std::unique_lock l(kv_lock);
   ceph_assert(!kv_sync_started);
   kv_sync_started = true;
   kv_cond.notify_all();
@@ -9360,7 +9721,7 @@ void BlueStore::_kv_sync_thread()
 	  --txc->osr->kv_committing_serially;
 	  txc->state = TransContext::STATE_KV_SUBMITTED;
 	  if (txc->osr->kv_submitted_waiters) {
-	    std::lock_guard<std::mutex> l(txc->osr->qlock);
+	    std::lock_guard l(txc->osr->qlock);
 	    txc->osr->qcond.notify_all();
 	  }
 
@@ -9416,7 +9777,7 @@ void BlueStore::_kv_sync_thread()
       ceph_assert(r == 0);
 
       {
-	std::unique_lock<std::mutex> m(kv_finalize_lock);
+	std::unique_lock m(kv_finalize_lock);
 	if (kv_committing_to_finalize.empty()) {
 	  kv_committing_to_finalize.swap(kv_committing);
 	} else {
@@ -9489,7 +9850,7 @@ void BlueStore::_kv_finalize_thread()
   deque<TransContext*> kv_committed;
   deque<DeferredBatch*> deferred_stable;
   dout(10) << __func__ << " start" << dendl;
-  std::unique_lock<std::mutex> l(kv_finalize_lock);
+  std::unique_lock l(kv_finalize_lock);
   ceph_assert(!kv_finalize_started);
   kv_finalize_started = true;
   kv_finalize_cond.notify_all();
@@ -9597,7 +9958,7 @@ void BlueStore::deferred_try_submit()
 {
   dout(20) << __func__ << " " << deferred_queue.size() << " osrs, "
 	   << deferred_queue_size << " txcs" << dendl;
-  std::lock_guard<std::mutex> l(deferred_lock);
+  std::lock_guard l(deferred_lock);
   vector<OpSequencerRef> osrs;
   osrs.reserve(deferred_queue.size());
   for (auto& osr : deferred_queue) {
@@ -9690,7 +10051,7 @@ void BlueStore::_deferred_aio_finish(OpSequencer *osr)
   DeferredBatch *b = osr->deferred_running;
 
   {
-    std::lock_guard<std::mutex> l(deferred_lock);
+    std::lock_guard l(deferred_lock);
     ceph_assert(osr->deferred_running == b);
     osr->deferred_running = nullptr;
     if (!osr->deferred_pending) {
@@ -9708,7 +10069,7 @@ void BlueStore::_deferred_aio_finish(OpSequencer *osr)
   {
     uint64_t costs = 0;
     {
-      std::lock_guard<std::mutex> l2(osr->qlock);
+      std::lock_guard l2(osr->qlock);
       for (auto& i : b->txcs) {
 	TransContext *txc = &i;
 	txc->log_state_latency(logger, l_bluestore_state_deferred_aio_wait_lat);
@@ -9717,14 +10078,14 @@ void BlueStore::_deferred_aio_finish(OpSequencer *osr)
       }
     }
     throttle_deferred_bytes.put(costs);
-    std::lock_guard<std::mutex> l(kv_lock);
+    std::lock_guard l(kv_lock);
     deferred_done_queue.emplace_back(b);
   }
 
   // in the normal case, do not bother waking up the kv thread; it will
   // catch us on the next commit anyway.
   if (deferred_aggressive) {
-    std::lock_guard<std::mutex> l(kv_lock);
+    std::lock_guard l(kv_lock);
     kv_cond.notify_one();
   }
 }
@@ -9842,7 +10203,7 @@ int BlueStore::queue_transactions(
       deferred_try_submit();
       {
 	// wake up any previously finished deferred events
-	std::lock_guard<std::mutex> l(kv_lock);
+	std::lock_guard l(kv_lock);
 	kv_cond.notify_one();
       }
       throttle_deferred_bytes.get(txc->cost);
@@ -10302,7 +10663,7 @@ void BlueStore::_dump_extent_map(ExtentMap &em)
       dout(LogLevelV) << __func__ << "      csum: " << std::hex << v << std::dec
 		      << dendl;
     }
-    std::lock_guard<std::recursive_mutex> l(e.blob->shared_blob->get_cache()->lock);
+    std::lock_guard l(e.blob->shared_blob->get_cache()->lock);
     for (auto& i : e.blob->shared_blob->bc.buffer_map) {
       dout(LogLevelV) << __func__ << "       0x" << std::hex << i.first
 		      << "~" << i.second->length << std::dec
@@ -12554,12 +12915,14 @@ void BlueStore::_flush_cache()
 // We use a best-effort policy instead, e.g.,
 // we don't care if there are still some pinned onodes/data in the cache
 // after this command is completed.
-void BlueStore::flush_cache()
+int BlueStore::flush_cache(ostream *os)
 {
   dout(10) << __func__ << dendl;
   for (auto i : cache_shards) {
     i->trim_all();
   }
+
+  return 0;
 }
 
 void BlueStore::_apply_padding(uint64_t head_pad,

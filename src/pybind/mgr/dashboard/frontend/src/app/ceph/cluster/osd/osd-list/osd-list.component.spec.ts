@@ -1,17 +1,14 @@
 import { HttpClientModule } from '@angular/common/http';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
+import { RouterTestingModule } from '@angular/router/testing';
 
 import { TabsModule } from 'ngx-bootstrap/tabs';
 
 import { configureTestBed, PermissionHelper } from '../../../../../testing/unit-test-helper';
-import { ComponentsModule } from '../../../../shared/components/components.module';
-import { DataTableModule } from '../../../../shared/datatable/datatable.module';
 import { TableActionsComponent } from '../../../../shared/datatable/table-actions/table-actions.component';
 import { Permissions } from '../../../../shared/models/permissions';
-import { DimlessPipe } from '../../../../shared/pipes/dimless.pipe';
 import { AuthStorageService } from '../../../../shared/services/auth-storage.service';
-import { FormatterService } from '../../../../shared/services/formatter.service';
 import { SharedModule } from '../../../../shared/shared.module';
 import { PerformanceCounterModule } from '../../../performance-counter/performance-counter.module';
 import { OsdDetailsComponent } from '../osd-details/osd-details.component';
@@ -33,16 +30,11 @@ describe('OsdListComponent', () => {
       HttpClientModule,
       PerformanceCounterModule,
       TabsModule.forRoot(),
-      DataTableModule,
-      ComponentsModule,
-      SharedModule
+      SharedModule,
+      RouterTestingModule
     ],
     declarations: [OsdListComponent, OsdDetailsComponent, OsdPerformanceHistogramComponent],
-    providers: [
-      DimlessPipe,
-      FormatterService,
-      { provide: AuthStorageService, useValue: fakeAuthStorageService }
-    ]
+    providers: [{ provide: AuthStorageService, useValue: fakeAuthStorageService }]
   });
 
   beforeEach(() => {

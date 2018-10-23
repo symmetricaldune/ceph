@@ -5435,9 +5435,15 @@ int PrimaryLogPG::do_read(OpContext *ctx, OSDOp& osd_op) {
   uint64_t size = oi.size;
   bool trimmed_read = false;
 
+  dout(30) << __func__ << " oi.size: " << oi.size << dendl;
+  dout(30) << __func__ << " oi.truncate_seq: " << oi.truncate_seq << dendl;
+  dout(30) << __func__ << " op.extent.truncate_seq: " << op.extent.truncate_seq << dendl;
+  dout(30) << __func__ << " op.extent.truncate_size: " << op.extent.truncate_size << dendl;
+
   // are we beyond truncate_size?
   if ( (seq < op.extent.truncate_seq) &&
-       (op.extent.offset + op.extent.length > op.extent.truncate_size) )
+       (op.extent.offset + op.extent.length > op.extent.truncate_size) &&
+       (size > op.extent.truncate_size) )
     size = op.extent.truncate_size;
 
   if (op.extent.length == 0) //length is zero mean read the whole object
@@ -5450,6 +5456,8 @@ int PrimaryLogPG::do_read(OpContext *ctx, OSDOp& osd_op) {
     op.extent.length = size - op.extent.offset;
     trimmed_read = true;
   }
+
+  dout(30) << __func__ << "op.extent.length is now " << op.extent.length << dendl;
 
   // read into a buffer
   int result = 0;
@@ -11264,7 +11272,7 @@ SnapSetContext *PrimaryLogPG::get_snapset_context(
   const map<string, bufferlist> *attrs,
   bool oid_existed)
 {
-  Mutex::Locker l(snapset_contexts_lock);
+  std::lock_guard l(snapset_contexts_lock);
   SnapSetContext *ssc;
   map<hobject_t, SnapSetContext*>::iterator p = snapset_contexts.find(
     oid.get_snapdir());
@@ -11310,7 +11318,7 @@ SnapSetContext *PrimaryLogPG::get_snapset_context(
 
 void PrimaryLogPG::put_snapset_context(SnapSetContext *ssc)
 {
-  Mutex::Locker l(snapset_contexts_lock);
+  std::lock_guard l(snapset_contexts_lock);
   --ssc->ref;
   if (ssc->ref == 0) {
     if (ssc->registered)
@@ -11952,6 +11960,11 @@ void PrimaryLogPG::clear_async_reads()
              << dendl;
     close_op_ctx(i.second);
   }
+}
+
+void PrimaryLogPG::clear_cache()
+{
+  object_contexts.clear();
 }
 
 void PrimaryLogPG::on_shutdown()

@@ -3,10 +3,9 @@
 /*
  * Ceph distributed storage system
  *
- * Copyright (C) 2013,2014 Cloudwatt <libre.licensing@cloudwatt.com>
- * Copyright (C) 2014 Red Hat <contact@redhat.com>
+ * Copyright (C) 2018 Indian Institute of Science <office.ece@iisc.ac.in>
  *
- * Author: Loic Dachary <loic@dachary.org>
+ * Author: Myna Vajha <mynaramana@gmail.com>
  *
  *  This library is free software; you can redistribute it and/or
  *  modify it under the terms of the GNU Lesser General Public
@@ -465,7 +464,7 @@ TEST(ErasureCodeClay, encode)
   profile["m"] = "2";
   EXPECT_EQ(0, clay.init(profile, &cerr));
 
-  unsigned aligned_object_size = clay.get_alignment() * 2;
+  unsigned aligned_object_size = clay.get_chunk_size(1) * 2 * 2;
   {
     //
     // When the input bufferlist needs to be padded because

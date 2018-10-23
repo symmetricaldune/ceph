@@ -605,7 +605,7 @@ void ImageReplayer<I>::handle_init_remote_journaler(int r) {
   if (m_client_meta.image_id == m_local_image_id &&
       client.state != cls::journal::CLIENT_STATE_CONNECTED) {
     dout(5) << "client flagged disconnected, stopping image replay" << dendl;
-    if (m_local_image_ctx->mirroring_resync_after_disconnect) {
+    if (m_local_image_ctx->config.template get_val<bool>("rbd_mirroring_resync_after_disconnect")) {
       m_resync_requested = true;
       on_start_fail(-ENOTCONN, "disconnected: automatic resync");
     } else {
@@ -1491,9 +1491,8 @@ void ImageReplayer<I>::reschedule_update_status_task(int new_interval) {
       m_update_status_interval = new_interval;
     }
 
-    bool restarting = (new_interval == 0 || canceled_task);
     if (new_interval >= 0 && is_running_() &&
-        start_mirror_image_status_update(false, restarting)) {
+        start_mirror_image_status_update(true, false)) {
       m_update_status_task = new FunctionContext(
         [this](int r) {
           ceph_assert(m_threads->timer_lock.is_locked());
@@ -1509,6 +1508,7 @@ void ImageReplayer<I>::reschedule_update_status_task(int new_interval) {
   }
 
   if (canceled_task) {
+    // decrement in-flight status update counter for canceled task
     finish_mirror_image_status_update();
   }
 }

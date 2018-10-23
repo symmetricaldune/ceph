@@ -38,10 +38,12 @@
 ActivePyModules::ActivePyModules(PyModuleConfig &module_config_,
           std::map<std::string, std::string> store_data,
           DaemonStateIndex &ds, ClusterState &cs,
-	  MonClient &mc, LogChannelRef clog_, Objecter &objecter_,
+          MonClient &mc, LogChannelRef clog_,
+          LogChannelRef audit_clog_, Objecter &objecter_,
           Client &client_, Finisher &f, DaemonServer &server)
   : module_config(module_config_), daemon_state(ds), cluster_state(cs),
-    monc(mc), clog(clog_), objecter(objecter_), client(client_), finisher(f),
+    monc(mc), clog(clog_), audit_clog(audit_clog_), objecter(objecter_),
+    client(client_), finisher(f),
     server(server), lock("ActivePyModules")
 {
   store_cache = std::move(store_data);
@@ -58,7 +60,7 @@ void ActivePyModules::dump_server(const std::string &hostname,
   std::string ceph_version;
 
   for (const auto &i : dmc) {
-    Mutex::Locker l(i.second->lock);
+    std::lock_guard l(i.second->lock);
     const auto &key = i.first;
     const std::string &str_type = key.first;
     const std::string &svc_name = key.second;
@@ -86,7 +88,7 @@ void ActivePyModules::dump_server(const std::string &hostname,
 PyObject *ActivePyModules::get_server_python(const std::string &hostname)
 {
   PyThreadState *tstate = PyEval_SaveThread();
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
   PyEval_RestoreThread(tstate);
   dout(10) << " (" << hostname << ")" << dendl;
 
@@ -101,7 +103,7 @@ PyObject *ActivePyModules::get_server_python(const std::string &hostname)
 PyObject *ActivePyModules::list_servers_python()
 {
   PyThreadState *tstate = PyEval_SaveThread();
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
   PyEval_RestoreThread(tstate);
   dout(10) << " >" << dendl;
 
@@ -130,7 +132,7 @@ PyObject *ActivePyModules::get_metadata_python(
     Py_RETURN_NONE;
   }
 
-  Mutex::Locker l(metadata->lock);
+  std::lock_guard l(metadata->lock);
   PyFormatter f;
   f.dump_string("hostname", metadata->hostname);
   for (const auto &i : metadata->metadata) {
@@ -150,7 +152,7 @@ PyObject *ActivePyModules::get_daemon_status_python(
     Py_RETURN_NONE;
   }
 
-  Mutex::Locker l(metadata->lock);
+  std::lock_guard l(metadata->lock);
   PyFormatter f;
   for (const auto &i : metadata->service_status) {
     f.dump_string(i.first.c_str(), i.second);
@@ -161,7 +163,7 @@ PyObject *ActivePyModules::get_daemon_status_python(
 PyObject *ActivePyModules::get_python(const std::string &what)
 {
   PyThreadState *tstate = PyEval_SaveThread();
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
   PyEval_RestoreThread(tstate);
 
   if (what == "fs_map") {
@@ -217,7 +219,7 @@ PyObject *ActivePyModules::get_python(const std::string &what)
     PyFormatter f;
     auto dmc = daemon_state.get_by_service("osd");
     for (const auto &i : dmc) {
-      Mutex::Locker l(i.second->lock);
+      std::lock_guard l(i.second->lock);
       f.open_object_section(i.first.second.c_str());
       f.dump_string("hostname", i.second->hostname);
       for (const auto &j : i.second->metadata) {
@@ -371,7 +373,7 @@ PyObject *ActivePyModules::get_python(const std::string &what)
 
 int ActivePyModules::start_one(PyModuleRef py_module)
 {
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
 
   ceph_assert(modules.count(py_module->get_name()) == 0);
 
@@ -394,7 +396,7 @@ int ActivePyModules::start_one(PyModuleRef py_module)
 
 void ActivePyModules::shutdown()
 {
-  Mutex::Locker locker(lock);
+  std::lock_guard locker(lock);
 
   // Signal modules to drop out of serve() and/or tear down resources
   for (auto &i : modules) {
@@ -424,7 +426,7 @@ void ActivePyModules::shutdown()
 void ActivePyModules::notify_all(const std::string &notify_type,
                      const std::string &notify_id)
 {
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
 
   dout(10) << __func__ << ": notify_all " << notify_type << dendl;
   for (auto& i : modules) {
@@ -439,7 +441,7 @@ void ActivePyModules::notify_all(const std::string &notify_type,
 
 void ActivePyModules::notify_all(const LogEntry &log_entry)
 {
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
 
   dout(10) << __func__ << ": notify_all (clog)" << dendl;
   for (auto& i : modules) {
@@ -460,7 +462,7 @@ bool ActivePyModules::get_store(const std::string &module_name,
     const std::string &key, std::string *val) const
 {
   PyThreadState *tstate = PyEval_SaveThread();
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
   PyEval_RestoreThread(tstate);
 
   const std::string global_key = PyModule::config_prefix
@@ -494,7 +496,7 @@ bool ActivePyModules::get_config(const std::string &module_name,
     const std::string &key, std::string *val) const
 {
   PyThreadState *tstate = PyEval_SaveThread();
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
   PyEval_RestoreThread(tstate);
 
   const std::string global_key = PyModule::config_prefix
@@ -502,7 +504,7 @@ bool ActivePyModules::get_config(const std::string &module_name,
 
   dout(4) << __func__ << " key: " << global_key << dendl;
 
-  Mutex::Locker lock(module_config.lock);
+  std::lock_guard lock(module_config.lock);
   
   auto i = module_config.config.find(global_key);
   if (i != module_config.config.end()) {
@@ -517,7 +519,7 @@ PyObject *ActivePyModules::get_store_prefix(const std::string &module_name,
     const std::string &prefix) const
 {
   PyThreadState *tstate = PyEval_SaveThread();
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
   PyEval_RestoreThread(tstate);
 
   const std::string base_prefix = PyModule::config_prefix
@@ -527,7 +529,7 @@ PyObject *ActivePyModules::get_store_prefix(const std::string &module_name,
 
   PyFormatter f;
   
-  Mutex::Locker lock(module_config.lock);
+  std::lock_guard lock(module_config.lock);
   
   for (auto p = store_cache.lower_bound(global_prefix);
        p != store_cache.end() && p->first.find(global_prefix) == 0;
@@ -546,7 +548,7 @@ void ActivePyModules::set_store(const std::string &module_name,
   Command set_cmd;
   {
     PyThreadState *tstate = PyEval_SaveThread();
-    Mutex::Locker l(lock);
+    std::lock_guard l(lock);
     PyEval_RestoreThread(tstate);
 
     if (val) {
@@ -591,7 +593,7 @@ void ActivePyModules::set_config(const std::string &module_name,
 std::map<std::string, std::string> ActivePyModules::get_services() const
 {
   std::map<std::string, std::string> result;
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
   for (const auto& i : modules) {
     const auto &module = i.second.get();
     std::string svc_str = module->get_uri();
@@ -610,7 +612,7 @@ PyObject* ActivePyModules::with_perf_counters(
     const std::string &path) const
 {
   PyThreadState *tstate = PyEval_SaveThread();
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
   PyEval_RestoreThread(tstate);
 
   PyFormatter f;
@@ -618,7 +620,7 @@ PyObject* ActivePyModules::with_perf_counters(
 
   auto metadata = daemon_state.get(DaemonKey(svc_name, svc_id));
   if (metadata) {
-    Mutex::Locker l2(metadata->lock);
+    std::lock_guard l2(metadata->lock);
     if (metadata->perf_counters.instances.count(path)) {
       auto counter_instance = metadata->perf_counters.instances.at(path);
       auto counter_type = metadata->perf_counters.types.at(path);
@@ -700,7 +702,7 @@ PyObject* ActivePyModules::get_perf_schema_python(
     const std::string &svc_id)
 {
   PyThreadState *tstate = PyEval_SaveThread();
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
   PyEval_RestoreThread(tstate);
 
   DaemonStateCollection daemons;
@@ -728,7 +730,7 @@ PyObject* ActivePyModules::get_perf_schema_python(
       daemon_name << key.first << "." << key.second;
       f.open_object_section(daemon_name.str().c_str());
 
-      Mutex::Locker l(state->lock);
+      std::lock_guard l(state->lock);
       for (auto ctr_inst_iter : state->perf_counters.instances) {
         const auto &counter_name = ctr_inst_iter.first;
 	f.open_object_section(counter_name.c_str());
@@ -754,7 +756,7 @@ PyObject* ActivePyModules::get_perf_schema_python(
 PyObject *ActivePyModules::get_context()
 {
   PyThreadState *tstate = PyEval_SaveThread();
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
   PyEval_RestoreThread(tstate);
 
   // Construct a capsule containing ceph context.
@@ -812,7 +814,7 @@ PyObject *construct_with_capsule(
 PyObject *ActivePyModules::get_osdmap()
 {
   PyThreadState *tstate = PyEval_SaveThread();
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
   PyEval_RestoreThread(tstate);
 
   OSDMap *newmap = new OSDMap;
@@ -872,7 +874,7 @@ int ActivePyModules::handle_command(
 
 void ActivePyModules::get_health_checks(health_check_map_t *checks)
 {
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
   for (auto& p : modules) {
     p.second->get_health_checks(checks);
   }
@@ -881,7 +883,7 @@ void ActivePyModules::get_health_checks(health_check_map_t *checks)
 void ActivePyModules::set_uri(const std::string& module_name,
                         const std::string &uri)
 {
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
 
   dout(4) << " module " << module_name << " set URI '" << uri << "'" << dendl;
 
@@ -900,5 +902,17 @@ void ActivePyModules::remove_osd_perf_query(OSDPerfMetricQueryID query_id)
   if (r < 0) {
     dout(0) << "remove_osd_perf_query for query_id=" << query_id << " failed: "
             << cpp_strerror(r) << dendl;
+  }
+}
+
+void ActivePyModules::cluster_log(const std::string &channel, clog_type prio,
+  const std::string &message)
+{
+  std::lock_guard l(lock);
+
+  if (channel == "audit") {
+    audit_clog->do_log(prio, message);
+  } else {
+    clog->do_log(prio, message);
   }
 }

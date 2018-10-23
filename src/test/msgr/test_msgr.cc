@@ -101,7 +101,10 @@ class FakeDispatcher : public Dispatcher {
 
   explicit FakeDispatcher(bool s): Dispatcher(g_ceph_context), lock("FakeDispatcher::lock"),
                           is_server(s), got_new(false), got_remote_reset(false),
-                          got_connect(false), loopback(false) {}
+                          got_connect(false), loopback(false) {
+    // don't need authorizers
+    ms_set_require_authorizer(false);
+  }
   bool ms_can_fast_dispatch_any() const override { return true; }
   bool ms_can_fast_dispatch(const Message *m) const override {
     switch (m->get_type()) {
@@ -198,12 +201,8 @@ class FakeDispatcher : public Dispatcher {
     cond.Signal();
   }
 
-  bool ms_verify_authorizer(Connection *con, int peer_type, int protocol,
-                            bufferlist& authorizer, bufferlist& authorizer_reply,
-                            bool& isvalid, CryptoKey& session_key,
-			    std::unique_ptr<AuthAuthorizerChallenge> *challenge) override {
-    isvalid = true;
-    return true;
+  int ms_handle_authentication(Connection *con) override {
+    return 1;
   }
 
   void reply_message(Message *m) {
@@ -838,7 +837,10 @@ class SyntheticDispatcher : public Dispatcher {
 
   SyntheticDispatcher(bool s, SyntheticWorkload *wl):
       Dispatcher(g_ceph_context), lock("SyntheticDispatcher::lock"), is_server(s), got_new(false),
-      got_remote_reset(false), got_connect(false), index(0), workload(wl) {}
+      got_remote_reset(false), got_connect(false), index(0), workload(wl) {
+    // don't need authorizers
+    ms_set_require_authorizer(false);
+  }
   bool ms_can_fast_dispatch_any() const override { return true; }
   bool ms_can_fast_dispatch(const Message *m) const override {
     switch (m->get_type()) {
@@ -917,12 +919,8 @@ class SyntheticDispatcher : public Dispatcher {
     }
   }
 
-  bool ms_verify_authorizer(Connection *con, int peer_type, int protocol,
-                            bufferlist& authorizer, bufferlist& authorizer_reply,
-                            bool& isvalid, CryptoKey& session_key,
-			    std::unique_ptr<AuthAuthorizerChallenge> *challenge) override {
-    isvalid = true;
-    return true;
+  int ms_handle_authentication(Connection *con) override {
+    return 1;
   }
 
   void reply_message(const Message *m, Payload& pl) {
@@ -1402,7 +1400,10 @@ class MarkdownDispatcher : public Dispatcher {
  public:
   std::atomic<uint64_t> count = { 0 };
   explicit MarkdownDispatcher(bool s): Dispatcher(g_ceph_context), lock("MarkdownDispatcher::lock"),
-                              last_mark(false) {}
+                              last_mark(false) {
+    // don't need authorizers
+    ms_set_require_authorizer(false);
+  }
   bool ms_can_fast_dispatch_any() const override { return false; }
   bool ms_can_fast_dispatch(const Message *m) const override {
     switch (m->get_type()) {
@@ -1464,12 +1465,8 @@ class MarkdownDispatcher : public Dispatcher {
   void ms_fast_dispatch(Message *m) override {
     ceph_abort();
   }
-  bool ms_verify_authorizer(Connection *con, int peer_type, int protocol,
-                            bufferlist& authorizer, bufferlist& authorizer_reply,
-                            bool& isvalid, CryptoKey& session_key,
-			    std::unique_ptr<AuthAuthorizerChallenge> *challenge) override {
-    isvalid = true;
-    return true;
+  int ms_handle_authentication(Connection *con) override {
+    return 1;
   }
 };
 
